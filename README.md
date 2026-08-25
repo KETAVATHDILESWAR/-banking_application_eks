@@ -19,33 +19,33 @@
 This is a **learning / portfolio reference project**. It intentionally
 **self-hosts its data stores (PostgreSQL, Redis, Kafka) in-cluster** rather than
 using managed AWS data services, uses **Traefik** for ingress, and is served on
-a real domain over HTTPS (`https://vijaygiduthuri.in`).
+a real domain over HTTPS (`http://<NLB-DNS>`).
 
 ---
 
 ## What it is
 
 - **30 backend microservices + an API gateway**, written in **Go 1.25** (Gin for
-  REST). Each service listens on `:8080` and exposes `/healthz`, `/readyz`,
-  `/startupz`, and `/metrics`, with structured JSON logs carrying a `trace_id`.
+ REST). Each service listens on `:8080` and exposes `/healthz`, `/readyz`,
+ `/startupz`, and `/metrics`, with structured JSON logs carrying a `trace_id`.
 - **React frontend** SPA served by nginx (Register / Login / Accounts / Deposit /
-  Transfer / Cards / Loans / Dashboard).
+ Transfer / Cards / Loans / Dashboard).
 - **Three comms styles:**
-  - **REST** — client ⇄ API gateway ⇄ services
-  - **gRPC** — internal service-to-service (e.g. `account`/`transaction` → `ledger`),
-    contracts generated from `proto/` (buf)
-  - **Kafka** — async events via a **transactional outbox** (e.g. a deposit emits
-    an event consumed by statement / audit / fraud)
+ - **REST** — client ⇄ API gateway ⇄ services
+ - **gRPC** — internal service-to-service (e.g. `account`/`transaction` → `ledger`),
+  contracts generated from `proto/` (buf)
+ - **Kafka** — async events via a **transactional outbox** (e.g. a deposit emits
+  an event consumed by statement / audit / fraud)
 - **Correctness patterns:** a **double-entry ledger** (every transaction is a
-  balanced set of DEBIT/CREDIT entries), a **transactional outbox** for reliable
-  event publishing, and **idempotency keys** on money operations.
+ balanced set of DEBIT/CREDIT entries), a **transactional outbox** for reliable
+ event publishing, and **idempotency keys** on money operations.
 - **Backed by** PostgreSQL (single shared DB, per-service table prefixes),
-  **Redis** (cache/sessions), **Kafka** (event bus), and **S3** (documents).
+ **Redis** (cache/sessions), **Kafka** (event bus), and **S3** (documents).
 - **OpenTelemetry** everywhere: traces → **Tempo**, metrics → **Prometheus**,
-  logs → **Loki**, all correlated in **Grafana** (click a log's `trace_id` → jump
-  straight to the trace).
+ logs → **Loki**, all correlated in **Grafana** (click a log's `trace_id` → jump
+ straight to the trace).
 - Shipped to **EKS** (`us-east-1`) through **GitHub Actions → ECR → Argo CD**,
-  with **HTTPS** (Let's Encrypt), **HPA autoscaling**, and **Velero** backups.
+ with **HPA autoscaling**, and **Velero** backups.
 
 ---
 
@@ -53,134 +53,129 @@ a real domain over HTTPS (`https://vijaygiduthuri.in`).
 
 ```mermaid
 flowchart TB
-    dev([Developer])
-    gh[(GitHub Repo<br/>code · Helm chart · Argo apps)]
-    ci[GitHub Actions<br/>build · Trivy · push]
-    ecr[(Amazon ECR<br/>single repo, tag-prefix/service)]
-    tf[Terraform<br/>VPC · EKS · ECR · S3 · Route53 · IAM/IRSA]
+  dev([Developer])
+  gh[(GitHub Repo<br/>code · Helm chart · Argo apps)]
+  ci[GitHub Actions<br/>build · Trivy · push]
+  ecr[(Amazon ECR<br/>single repo, tag-prefix/service)]
+  tf[Terraform<br/>VPC · EKS · ECR · S3 · IAM/IRSA]
 
-    dev -->|git push| gh
-    gh -->|trigger| ci
-    ci -->|push images| ecr
-    ci -.->|bump image tags| gh
+  dev -->|git push| gh
+  gh -->|trigger| ci
+  ci -->|push images| ecr
+  ci -.->|bump image tags| gh
 
-    user([Browser])
-    le[("Let's Encrypt ACME")]
-    gd[(GoDaddy → Route 53<br/>vijaygiduthuri.in)]
+  user([Browser])
 
-    subgraph cluster["Amazon EKS - banking-dev (us-east-1)"]
-        direction TB
-        argo[Argo CD<br/>App-of-Apps · syncs every layer]
+  subgraph cluster["Amazon EKS - banking-dev (us-east-1)"]
+    direction TB
+    argo[Argo CD<br/>App-of-Apps · syncs every layer]
 
-        subgraph platform["Ingress + TLS"]
-            nlb[AWS NLB]
-            traefik[Traefik<br/>:80 → :443 redirect]
-            cm[cert-manager]
-        end
-
-        subgraph bank["banking namespace"]
-            fe[React Frontend]
-            gwapi[API Gateway :8080]
-            svcs["30 Go microservices :8080<br/>identity · core banking · ledger<br/>products · risk · async · insight"]
-            pg[(PostgreSQL)]
-            redis[(Redis)]
-            mq{{Apache Kafka}}
-        end
-
-        subgraph obs["Observability"]
-            otel[OTel Collector<br/>OTLP :4317]
-            prom["Prometheus + Alertmanager"]
-            graf[Grafana]
-            loki["Loki + Promtail"]
-            tempo[Tempo]
-        end
-
-        subgraph opsg["Cluster ops"]
-            ms[metrics-server → HPA]
-            velero[Velero → S3 backups]
-        end
-
-        argo -.->|syncs| platform
-        argo -.->|syncs| bank
-        argo -.->|syncs| obs
-        argo -.->|syncs| opsg
-
-        nlb --> traefik
-        traefik --> fe
-        traefik --> gwapi
-        traefik --> graf
-        gwapi -->|REST| svcs
-        svcs -->|gRPC| svcs
-        svcs --> pg
-        svcs --> redis
-        svcs <-->|events / outbox| mq
-        cm -->|TLS Secret| traefik
-
-        svcs -.->|OTLP traces+metrics| otel
-        otel --> tempo
-        prom -.->|scrape /metrics| svcs
-        loki -.->|tail pod logs| svcs
-        graf --> prom
-        graf --> loki
-        graf --> tempo
+    subgraph platform["Ingress"]
+      nlb[AWS NLB]
+      traefik[Traefik<br/>:80]
     end
 
-    s3[(Amazon S3<br/>documents · velero backups · tfstate)]
+    subgraph bank["banking namespace"]
+      fe[React Frontend]
+      gwapi[API Gateway :8080]
+      svcs["30 Go microservices :8080<br/>identity · core banking · ledger<br/>products · risk · async · insight"]
+      pg[(PostgreSQL)]
+      redis[(Redis)]
+      mq{{Apache Kafka}}
+    end
 
-    tf -.->|creates| cluster
-    ecr -.->|kubelet pulls| bank
-    velero --> s3
-    svcs -.->|documents| s3
+    subgraph obs["Observability"]
+      otel[OTel Collector<br/>OTLP :4317]
+      prom["Prometheus + Alertmanager"]
+      graf[Grafana]
+      loki["Loki + Promtail"]
+      tempo[Tempo]
+    end
 
-    user -->|HTTPS| gd --> nlb
-    cm <-.->|HTTP-01| le
+    subgraph opsg["Cluster ops"]
+      ms[metrics-server → HPA]
+      velero[Velero → S3 backups]
+    end
 
-    classDef external  fill:#fef3c7,stroke:#92400e,color:#1f2937,stroke-width:2px
-    classDef cisrc     fill:#dbeafe,stroke:#1e40af,color:#1f2937,stroke-width:2px
-    classDef gitops    fill:#ede9fe,stroke:#6d28d9,color:#1f2937,stroke-width:2px
-    classDef ingress   fill:#ffedd5,stroke:#c2410c,color:#1f2937,stroke-width:2px
-    classDef app       fill:#d1fae5,stroke:#065f46,color:#1f2937,stroke-width:2px
-    classDef datastore fill:#fce7f3,stroke:#9d174d,color:#1f2937,stroke-width:2px
-    classDef obs       fill:#cffafe,stroke:#0e7490,color:#1f2937,stroke-width:2px
+    argo -.->|syncs| platform
+    argo -.->|syncs| bank
+    argo -.->|syncs| obs
+    argo -.->|syncs| opsg
 
-    class dev,user,le,gd external
-    class gh,ci,ecr,tf,s3 cisrc
-    class argo gitops
-    class nlb,traefik,cm ingress
-    class fe,gwapi,svcs app
-    class pg,redis,mq datastore
-    class otel,prom,graf,loki,tempo,ms,velero obs
+    nlb --> traefik
+    traefik --> fe
+    traefik --> gwapi
+    traefik --> graf
+    gwapi -->|REST| svcs
+    svcs -->|gRPC| svcs
+    svcs --> pg
+    svcs --> redis
+    svcs <-->|events / outbox| mq
+
+    svcs -.->|OTLP traces+metrics| otel
+    otel --> tempo
+    prom -.->|scrape /metrics| svcs
+    loki -.->|tail pod logs| svcs
+    graf --> prom
+    graf --> loki
+    graf --> tempo
+  end
+
+  s3[(Amazon S3<br/>documents · velero backups · tfstate)]
+
+  tf -.->|creates| cluster
+  ecr -.->|kubelet pulls| bank
+  velero --> s3
+  svcs -.->|documents| s3
+
+  user -->|HTTP| nlb
+
+  classDef external fill:#fef3c7,stroke:#92400e,color:#1f2937,stroke-width:2px
+  classDef cisrc   fill:#dbeafe,stroke:#1e40af,color:#1f2937,stroke-width:2px
+  classDef gitops  fill:#ede9fe,stroke:#6d28d9,color:#1f2937,stroke-width:2px
+  classDef ingress  fill:#ffedd5,stroke:#c2410c,color:#1f2937,stroke-width:2px
+  classDef app    fill:#d1fae5,stroke:#065f46,color:#1f2937,stroke-width:2px
+  classDef datastore fill:#fce7f3,stroke:#9d174d,color:#1f2937,stroke-width:2px
+  classDef obs    fill:#cffafe,stroke:#0e7490,color:#1f2937,stroke-width:2px
+
+  class dev,user external
+  class gh,ci,ecr,tf,s3 cisrc
+  class argo gitops
+  class nlb,traefik ingress
+  class fe,gwapi,svcs app
+  class pg,redis,mq datastore
+  class otel,prom,graf,loki,tempo,ms,velero obs
 ```
 
 **Legend**
 
 | Colour | Category | Components |
 |---|---|---|
-| 🟡 Amber  | External actors      | Developer, Browser, Let's Encrypt, GoDaddy→Route 53 |
-| 🔵 Blue   | Source / CI / Infra  | GitHub Repo, GitHub Actions, Amazon ECR, Terraform, S3 |
-| 🟣 Purple | GitOps controller    | Argo CD (App-of-Apps) |
-| 🟠 Orange | Ingress + TLS        | AWS NLB, Traefik, cert-manager |
-| 🟢 Green  | Application          | React frontend, API gateway, 30 Go microservices |
-| 🩷 Pink   | Data stores          | PostgreSQL, Redis, Kafka |
-| 🔷 Cyan   | Observability + Ops  | OTel Collector, Prometheus/Grafana/Alertmanager, Loki, Tempo, metrics-server, Velero |
+| 🟡 Amber | External actors   | Developer, Browser |
+| 🔵 Blue  | Source / CI / Infra | GitHub Repo, GitHub Actions, Amazon ECR, Terraform, S3 |
+| 🟣 Purple | GitOps controller  | Argo CD (App-of-Apps) |
+| 🟠 Orange | Ingress       | AWS NLB, Traefik |
+| 🟢 Green | Application     | React frontend, API gateway, 30 Go microservices |
+| 🩷 Pink  | Data stores     | PostgreSQL, Redis, Kafka |
+| 🔷 Cyan  | Observability + Ops | OTel Collector, Prometheus/Grafana/Alertmanager, Loki, Tempo, metrics-server, Velero |
 
 - **Infrastructure (Terraform).** `terraform/environments/dev` provisions VPC,
-  **EKS** (+ EBS CSI add-on), **ECR** (single repo, tag-prefix per service), **S3**,
-  **Route 53** (apex zone), and **IAM/IRSA** — state in S3 with native locking.
+ **EKS** (+ EBS CSI add-on), **ECR** (single repo, tag-prefix per service), **S3**,
+ **IAM/IRSA** — state in S3 with native locking.
 - **CI (GitHub Actions).** On push to `main`: build all 32 images in parallel,
-  **Trivy** scan, push to ECR, then bump each service's image tag in
-  `deploy/helm/banking-platform/values.yaml` and commit — **no `helm`/`kubectl` in CI.**
+ **Trivy** scan, push to ECR, then bump each service's image tag in
+ `deploy/helm/banking-platform/values.yaml` and commit — **no `helm`/`kubectl` in CI.**
 - **CD (Argo CD + Helm).** Argo CD's **App-of-Apps** renders the umbrella chart
-  and reconciles every layer: the app, cluster storage (gp3), cert-manager,
-  observability, metrics-server, and Velero.
+ and reconciles every layer: the app, cluster storage (gp3),
+ observability, metrics-server, and Velero.
 - **Ingress + TLS.** One **AWS NLB** → **Traefik**, path-routed on the single apex
-  host; **cert-manager** auto-issues/renews a Let's Encrypt cert (HTTP-01).
+ host; **** auto-issues/renews a cert (HTTP-01).
 - **Data plane.** REST via the gateway; **gRPC** for internal calls (→ ledger);
-  **Kafka** for async events via a **transactional outbox**; **Redis** cache;
-  **S3** for documents.
+ **Kafka** for async events via a **transactional outbox**; **Redis** cache;
+ **S3** for documents.
 - **Observability.** Services export **OTLP** to the **OTel Collector** →
-  **Tempo** (traces); **Prometheus** scrapes `/metrics`; **Promtail** ships logs
-  to **Loki**; **Grafana** ties all three together with a **per-service dashboard**.
+ **Tempo** (traces); **Prometheus** scrapes `/metrics`; **Promtail** ships logs
+ to **Loki**; **Grafana** ties all three together with a **per-service dashboard**.
 
 See [`docs/aws/`](docs/aws/) for the full phase-by-phase deployment guide (01–08).
 
@@ -219,56 +214,56 @@ api-gateway + frontend + PostgreSQL + Kafka + Redis), all `Running`:
 
 ```text
 $ kubectl -n banking get pods
-NAME                                                   READY   STATUS
-account-service-deployment-…                           1/1     Running
-admin-service-deployment-…                             1/1     Running
-analytics-service-deployment-…                         1/1     Running
-api-gateway-deployment-…                               1/1     Running
-audit-service-deployment-…                             1/1     Running
-auth-service-deployment-…                              1/1     Running
-authz-service-deployment-…                             1/1     Running
-beneficiary-service-deployment-…                       1/1     Running
-card-service-deployment-…                              1/1     Running
-currency-exchange-service-deployment-…                 1/1     Running
-customer-service-deployment-…                          1/1     Running
-document-service-deployment-…                          1/1     Running
-email-service-deployment-…                             1/1     Running
-emi-service-deployment-…                               1/1     Running
-fixed-deposit-service-deployment-…                     1/1     Running
-fraud-service-deployment-…                             1/1     Running
-frontend-deployment-…                                  1/1     Running
-investment-service-deployment-…                        1/1     Running
-kafka-0                                                 1/1     Running
-kyc-service-deployment-…                               1/1     Running
-ledger-service-deployment-…                            1/1     Running
-loan-service-deployment-…                              1/1     Running
-notification-service-deployment-…                      1/1     Running
-payment-service-deployment-…                           1/1     Running
-postgres-0                                             1/1     Running
-profile-service-deployment-…                           1/1     Running
-recurring-deposit-service-deployment-…                 1/1     Running
-redis-…                                                1/1     Running
-reports-service-deployment-…                           1/1     Running
-search-service-deployment-…                            1/1     Running
-sms-service-deployment-…                               1/1     Running
-statement-service-deployment-…                         1/1     Running
-support-service-deployment-…                           1/1     Running
-transaction-service-deployment-…                       1/1     Running
-wallet-service-deployment-…                            1/1     Running
+NAME                          READY  STATUS
+account-service-deployment-…              1/1   Running
+admin-service-deployment-…               1/1   Running
+analytics-service-deployment-…             1/1   Running
+api-gateway-deployment-…                1/1   Running
+audit-service-deployment-…               1/1   Running
+auth-service-deployment-…               1/1   Running
+authz-service-deployment-…               1/1   Running
+beneficiary-service-deployment-…            1/1   Running
+card-service-deployment-…               1/1   Running
+currency-exchange-service-deployment-…         1/1   Running
+customer-service-deployment-…             1/1   Running
+document-service-deployment-…             1/1   Running
+email-service-deployment-…               1/1   Running
+emi-service-deployment-…                1/1   Running
+fixed-deposit-service-deployment-…           1/1   Running
+fraud-service-deployment-…               1/1   Running
+frontend-deployment-…                 1/1   Running
+investment-service-deployment-…            1/1   Running
+kafka-0                         1/1   Running
+kyc-service-deployment-…                1/1   Running
+ledger-service-deployment-…              1/1   Running
+loan-service-deployment-…               1/1   Running
+notification-service-deployment-…           1/1   Running
+payment-service-deployment-…              1/1   Running
+postgres-0                       1/1   Running
+profile-service-deployment-…              1/1   Running
+recurring-deposit-service-deployment-…         1/1   Running
+redis-…                        1/1   Running
+reports-service-deployment-…              1/1   Running
+search-service-deployment-…              1/1   Running
+sms-service-deployment-…                1/1   Running
+statement-service-deployment-…             1/1   Running
+support-service-deployment-…              1/1   Running
+transaction-service-deployment-…            1/1   Running
+wallet-service-deployment-…              1/1   Running
 ```
 
 Platform components run in their own namespaces — `traefik`, `argocd`,
-`cert-manager`, `observability` (Prometheus/Grafana/Alertmanager, Loki, Tempo,
-OTel Collector), `velero`, and `kube-system` (EBS CSI, metrics-server).
+`observability` (Prometheus/Grafana/Alertmanager, Loki, Tempo, OTel Collector),
+`velero`, and `kube-system` (EBS CSI, metrics-server).
 
-### Live URLs (single apex host, path-routed, HTTPS)
+### Live URLs (AWS NLB DNS, HTTP)
 ```
-https://vijaygiduthuri.in/              🏦 app (React)
-https://vijaygiduthuri.in/api           REST API (gateway)
-https://vijaygiduthuri.in/argocd/       🚀 Argo CD
-https://vijaygiduthuri.in/grafana/      📊 Grafana (metrics · logs · traces)
-https://vijaygiduthuri.in/prometheus/   📈 Prometheus
-https://vijaygiduthuri.in/alertmanager/ 🚨 Alertmanager
+http://<NLB-DNS>/            🏦 app (React)
+http://<NLB-DNS>/api          REST API (gateway)
+http://<NLB-DNS>/argocd/        🚀 Argo CD
+http://<NLB-DNS>/grafana/        📊 Grafana (metrics · logs · traces)
+http://<NLB-DNS>/prometheus/      📈 Prometheus
+http://<NLB-DNS>/alertmanager/     🚨 Alertmanager
 ```
 
 ---
@@ -285,11 +280,11 @@ https://vijaygiduthuri.in/alertmanager/ 🚨 Alertmanager
 | Messaging | **Apache Kafka** (event bus) + transactional outbox |
 | Object storage | **Amazon S3** (documents, Velero backups, Terraform state) |
 | Orchestration | **Amazon EKS** (`us-east-1`), managed node group (t3.xlarge) |
-| Ingress / TLS | **AWS NLB → Traefik** + **cert-manager** (Let's Encrypt) |
-| DNS | **Route 53** apex ALIAS (GoDaddy delegates nameservers) |
+| Ingress | **AWS NLB → Traefik** (HTTP :80) |
+| DNS | **AWS NLB DNS hostname** |
 | GitOps | **Argo CD** (App-of-Apps) |
 | Packaging | **Helm** umbrella chart (`deploy/helm/banking-platform/`) |
-| IaC | **Terraform** (`terraform/` — vpc, iam, eks, ecr, s3, route53; optional velero) |
+| IaC | **Terraform** (`terraform/` — vpc, iam, eks, ecr, s3; optional velero) |
 | CI/CD | **GitHub Actions** — matrix build, Trivy scan, ECR push, values bump |
 | Metrics | **Prometheus** (kube-prometheus-stack) + **Grafana** |
 | Logs | **Loki + Promtail** |
@@ -304,23 +299,23 @@ https://vijaygiduthuri.in/alertmanager/ 🚨 Alertmanager
 
 ```
 banking_application_eks/
-├── services/            # 30 Go microservices + api-gateway (one module each)
-├── pkg/                 # shared kit: config, logger, telemetry, http/grpc servers,
-│                        #   kafka, redis, postgres, s3, auth (JWT), outbox, money, …
-├── proto/               # protobuf / gRPC contracts (buf)
-├── frontend/            # React SPA (Vite + nginx)
-├── build/               # shared service Dockerfile
+├── services/      # 30 Go microservices + api-gateway (one module each)
+├── pkg/         # shared kit: config, logger, telemetry, http/grpc servers,
+│            #  kafka, redis, postgres, s3, auth (JWT), outbox, money, …
+├── proto/        # protobuf / gRPC contracts (buf)
+├── frontend/      # React SPA (Vite + nginx)
+├── build/        # shared service Dockerfile
 ├── deploy/
-│   ├── helm/banking-platform/   # umbrella Helm chart (per-service YAML + flat values)
-│   ├── argocd/                  # App-of-Apps: bootstrap/ + apps/ (+ observability/)
-│   ├── cluster/                 # gp3 StorageClass, cert-manager ClusterIssuer
-│   └── observability/           # Prometheus/Grafana/Loki/Tempo/OTel values + dashboards
+│  ├── helm/banking-platform/  # umbrella Helm chart (per-service YAML + flat values)
+│  ├── argocd/         # App-of-Apps: bootstrap/ + apps/ (+ observability/)
+│  ├── cluster/         # gp3 StorageClass and cluster configuration
+│  └── observability/      # Prometheus/Grafana/Loki/Tempo/OTel values + dashboards
 ├── terraform/
-│   ├── modules/         # vpc · iam · eks · ecr · s3 · route53 · velero
-│   ├── environments/    # dev · qa · prod (dev is used here)
-│   └── velero/          # standalone, optional Velero stack (own state)
-├── docs/aws/            # 01–08 phase-by-phase deployment guides
-├── .github/workflows/   # ci.yaml (build→ECR→bump) · terraform.yaml
+│  ├── modules/     # vpc · iam · eks · ecr · s3 · velero
+│  ├── environments/  # dev · qa · prod (dev is used here)
+│  └── velero/     # standalone, optional Velero stack (own state)
+├── docs/aws/      # 01–08 phase-by-phase deployment guides
+├── .github/workflows/  # ci.yaml (build→ECR→bump) · terraform.yaml
 └── README.md
 ```
 
@@ -330,23 +325,21 @@ banking_application_eks/
 
 ```mermaid
 flowchart LR
-    tf[Terraform apply] --> eks[("Amazon EKS")]
-    push[git push] --> gha[GitHub Actions]
-    gha --> trivy[Trivy] --> ecr[("Amazon ECR")]
-    ecr --> bump[bump values.yaml] --> commit[commit]
-    commit --> argo[Argo CD auto-sync] --> eks
+  tf[Terraform apply] --> eks[("Amazon EKS")]
+  push[git push] --> gha[GitHub Actions]
+  gha --> trivy[Trivy] --> ecr[("Amazon ECR")]
+  ecr --> bump[bump values.yaml] --> commit[commit]
+  commit --> argo[Argo CD auto-sync] --> eks
 ```
 
 Follow the guides in order — [`docs/aws/`](docs/aws/):
 
-1. **[01](docs/aws/01-terraform-infra.md)** — Terraform: VPC, EKS (+EBS CSI), ECR, S3, Route 53
+1. **[01](docs/aws/01-terraform-infra.md)** — Terraform: VPC, EKS (+EBS CSI), ECR, S3
 2. **[02](docs/aws/02-traefik-ingress.md)** — Traefik ingress (AWS NLB)
 3. **[03](docs/aws/03-github-actions-cicd.md)** — CI/CD → ECR
 4. **[04](docs/aws/04-argocd.md)** — Argo CD App-of-Apps bootstrap
-5. **[05](docs/aws/05-dns-godaddy.md)** — DNS: apex via Route 53 (GoDaddy delegation)
-6. **[06](docs/aws/06-observability.md)** — Prometheus/Grafana/Loki/Tempo/OTel + metrics-server (HPA)
-7. **[07](docs/aws/07-https-tls.md)** — HTTPS/TLS (cert-manager + Let's Encrypt)
-8. **[08](docs/aws/08-velero.md)** — Backup & DR with Velero
+5. **[06](docs/aws/06-observability.md) — Prometheus/Grafana/Loki/Tempo/OTel + metrics-server (HPA)
+6. **[08](docs/aws/08-velero.md) — Backup & DR with Velero
 
 ---
 
@@ -363,10 +356,10 @@ docker compose -f docker-compose.yaml up --build
 ## Observability at a glance
 
 - **Grafana → "Banking — Service Detail (per service)"** — pick any service from a
-  dropdown to see its **running pods, request rate, p50/p95/p99 latency, CPU,
-  memory, and live logs**.
+ dropdown to see its **running pods, request rate, p50/p95/p99 latency, CPU,
+ memory, and live logs**.
 - **metrics ↔ logs ↔ traces:** click a log line's `trace_id` in Loki → jump to the
-  full request trace in Tempo.
+ full request trace in Tempo.
 - **HPAs** scale each service on CPU/memory (backed by metrics-server).
 
 ---
