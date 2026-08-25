@@ -1,19 +1,22 @@
 # Terraform — Banking Platform Infrastructure
 
-Modular Terraform that provisions the **AWS** foundation for the platform.
-Kubernetes add-ons (Traefik, cert-manager, ArgoCD, observability) are **not**
-managed here — they are Helm charts/manifests applied via GitOps (see `deploy/`).
+Modular Terraform that provisions the **AWS foundation** for the banking
+platform.
+
+Terraform manages only the AWS infrastructure. Kubernetes add-ons such as
+Traefik, Argo CD, and observability are deployed separately through the
+`deploy/` GitOps manifests.
 
 ## Layout
 
-```
+```text
 terraform/
 ├── modules/
 │   ├── vpc/     # VPC, public/private subnets, IGW, NAT, routes, EKS subnet tags
 │   ├── iam/     # EKS cluster role, node role, ECR push policy
-│   ├── eks/     # EKS cluster + managed node groups + OIDC   (Phase 9)
-│   ├── ecr/     # per-service ECR repositories               (Phase 9)
-│   └── s3/      # document/statement buckets                 (Phase 9)
+│   ├── eks/     # EKS cluster + managed node groups + OIDC
+│   ├── ecr/     # Per-service ECR repositories
+│   └── s3/      # Document/statement buckets
 └── environments/
     ├── dev/     # 10.10.0.0/16, single NAT
     ├── qa/      # 10.20.0.0/16, single NAT

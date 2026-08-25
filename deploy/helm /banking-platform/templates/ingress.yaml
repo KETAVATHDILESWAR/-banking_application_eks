@@ -6,21 +6,15 @@ metadata:
   namespace: {{ .Values.namespace }}
   labels:
     app.kubernetes.io/part-of: banking-platform
-  annotations:
-    {{- if .Values.ingress.tls }}
-    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
-    {{- end }}
 spec:
-  ingressClassName: {{ .Values.ingress.className }}
-  {{- if .Values.ingress.tls }}
-  tls:
-    - hosts:
-        - {{ .Values.ingress.host }}
-      secretName: {{ .Values.ingress.tlsSecretName }}
-  {{- end }}
+  ingressClassName: traefik
   rules:
+    {{- if .Values.ingress.host }}
     - host: {{ .Values.ingress.host }}
       http:
+    {{- else }}
+    - http:
+    {{- end }}
         paths:
           - path: /api
             pathType: Prefix

@@ -1,6 +1,6 @@
 # App-of-apps root. Apply this ONCE (with project.yaml). It watches
 # deploy/argocd/apps/ and auto-creates every Application found there
-# (banking-platform, cert-manager, observability/*). Add a new app file to that
+# (banking-platform, observability/*). Add a new app file to that
 # directory and Argo CD creates it on the next sync — no manual kubectl apply.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -12,7 +12,7 @@ metadata:
 spec:
   project: banking
   source:
-    repoURL: "https://github.com/vijaygiduthuri/banking_application_eks.git"
+    repoURL: "https://github.com/KETAVATHDILESWAR/-banking_application_eks.git"
     targetRevision: main
     path: deploy/argocd/apps
     directory:

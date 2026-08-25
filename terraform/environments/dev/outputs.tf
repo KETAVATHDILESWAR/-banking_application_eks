@@ -38,15 +38,4 @@ output "documents_bucket" {
   value = module.s3_documents.bucket_name
 }
 
-output "route53_zone_id" {
-  value = module.route53.zone_id
-}
 
-# Paste these 4 nameservers into GoDaddy (Domain -> Nameservers).
-output "route53_name_servers" {
-  value = module.route53.name_servers
-}
-
-output "apex_fqdn" {
-  value = module.route53.apex_fqdn
-}

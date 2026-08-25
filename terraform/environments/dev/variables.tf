@@ -85,14 +85,4 @@ variable "ecr_repository_name" {
   default     = "banking-platform"
 }
 
-variable "domain_name" {
-  description = "Apex domain hosted in Route 53 (delegated from GoDaddy)."
-  type        = string
-  default     = "vijaygiduthuri.in"
-}
 
-variable "create_apex_record" {
-  description = "Stage 2: create the apex ALIAS -> Traefik NLB. Set true only after Traefik is installed, then re-apply."
-  type        = bool
-  default     = false
-}

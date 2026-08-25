@@ -357,13 +357,9 @@ postgres:
   storage: 2Gi
   storageClass: ""
 # ---------------------------------------------------------------------------
-# Ingress (Traefik) + TLS (cert-manager) — Phase 11. Disabled by default;
-# kind uses the NodePorts above. Set enabled/tls/host for EKS.
+# Ingress (Traefik)
+# TLS is not configured.
 # ---------------------------------------------------------------------------
 ingress:
   enabled: true
-  className: traefik
-  host: vijaygiduthuri.in
-  tls: true # cert-manager auto-issues banking-tls via ingress-shim
-  tlsSecretName: banking-tls
-  clusterIssuer: letsencrypt-prod
+  host: ""
